@@ -6,18 +6,18 @@ from PIL import Image
 import requests
 from io import BytesIO
 
-# API-sleutel ophalen
+# OpenAI API-sleutel ophalen
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Functie voor het genereren van een samenhangend verhaal
+# Functie om verhalen te genereren
 def generate_story(child_name, favorite_animal, theme, length, language):
     length_map = {"Kort": 200, "Middel": 500, "Lang": 1000}
     max_tokens = length_map[length]
 
     prompt = (
-        f"Write a coherent children's story with a clear beginning, middle, and end. "
-        f"The story should be about {child_name}, who loves {favorite_animal}, "
-        f"with a theme of {theme}. Ensure the story is engaging, logical, and has a meaningful conclusion."
+        f"Write a children's story in a clear structure: a beginning, middle, and end. "
+        f"The story should be about {child_name}, who loves {favorite_animal}, with a theme of {theme}. "
+        f"Make it engaging, logical, and ensure the story ends with a meaningful conclusion."
     )
 
     response = openai.ChatCompletion.create(
@@ -27,16 +27,17 @@ def generate_story(child_name, favorite_animal, theme, length, language):
     )
     story = response["choices"][0]["message"]["content"]
 
-    # Verhaal vertalen naar de gekozen taal
+    # Verhaal vertalen
     translator = Translator()
     translated_story = translator.translate(story, dest=language).text
     return translated_story
 
-# Functie voor het genereren van samenhangende illustraties
-def generate_illustration(paragraph, theme, style="children's cartoon"):
+# Functie om samenhangende illustraties te genereren
+def generate_illustration(paragraph, theme, style="cartoon for children"):
     dalle_prompt = (
-        f"An illustration in {style} style. The theme is {theme}. "
-        f"The content is: {paragraph}. Bright colors, consistent design, and suitable for children."
+        f"A colorful and cohesive illustration in {style} style. "
+        f"The theme is {theme}, matching the paragraph: '{paragraph}'. "
+        f"Ensure there is no text, letters, or symbols in the image. Use consistent colors and characters."
     )
     response = openai.Image.create(
         prompt=dalle_prompt,
@@ -49,7 +50,7 @@ def generate_illustration(paragraph, theme, style="children's cartoon"):
     return img
 
 # Streamlit UI
-st.title("StoryNest: Create Personalized Children's Stories")
+st.title("StoryNest: Personalized Children's Stories with Illustrations")
 st.sidebar.title("Story Settings")
 
 # Gebruikersinvoer
@@ -72,33 +73,33 @@ language = st.sidebar.selectbox(
         "pt",  # Portugees
     ],
     format_func=lambda lang: {
-        "en": "Engels",
-        "fr": "Frans",
+        "en": "English",
+        "fr": "Français",
         "nl": "Nederlands",
-        "de": "Duits",
-        "it": "Italiaans",
-        "es": "Spaans",
-        "tr": "Turks",
-        "ja": "Japans",
-        "ko": "Koreaans",
-        "pt": "Portugees",
+        "de": "Deutsch",
+        "it": "Italiano",
+        "es": "Español",
+        "tr": "Türkçe",
+        "ja": "日本語",
+        "ko": "한국어",
+        "pt": "Português",
     }[lang]
 )
 
 # Extra informatie
 extra_info = st.sidebar.text_area(
     "Additional Information (Optional)",
-    "Provide extra details to make the story unique (e.g., hobbies, places, friends)."
+    "Provide extra details to personalize the story (e.g., hobbies, places, friends)."
 )
 
-# Verhaal genereren
-if st.sidebar.button("Generate Story"):
-    with st.spinner("Generating your story and illustrations..."):
+# Verhaal en illustraties genereren
+if st.sidebar.button("Generate Story and Illustrations"):
+    with st.spinner("Generating story and illustrations..."):
         story = generate_story(child_name, favorite_animal, theme, story_length, language)
         st.subheader("Your Story:")
         st.write(story)
 
-        # Verdeel het verhaal in alinea's en genereer illustraties
+        # Verhaal opdelen en illustraties genereren
         paragraphs = story.split("\n")
         for i, paragraph in enumerate(paragraphs):
             if paragraph.strip():
