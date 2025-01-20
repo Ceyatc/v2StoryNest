@@ -6,17 +6,18 @@ from PIL import Image
 import requests
 from io import BytesIO
 
-# Haal API-sleutels op vanuit Streamlit Secrets
+# API-sleutel ophalen
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Functie voor het genereren van een verhaal
+# Functie voor het genereren van een samenhangend verhaal
 def generate_story(child_name, favorite_animal, theme, length, language):
     length_map = {"Kort": 200, "Middel": 500, "Lang": 1000}
     max_tokens = length_map[length]
 
     prompt = (
-        f"Write a children's story about {child_name}, who loves {favorite_animal}, "
-        f"with a theme of {theme}. Make it a {length.lower()} story suitable for children."
+        f"Write a coherent children's story with a clear beginning, middle, and end. "
+        f"The story should be about {child_name}, who loves {favorite_animal}, "
+        f"with a theme of {theme}. Ensure the story is engaging, logical, and has a meaningful conclusion."
     )
 
     response = openai.ChatCompletion.create(
@@ -26,16 +27,16 @@ def generate_story(child_name, favorite_animal, theme, length, language):
     )
     story = response["choices"][0]["message"]["content"]
 
-    # Vertaal het verhaal naar de gekozen taal
+    # Verhaal vertalen naar de gekozen taal
     translator = Translator()
     translated_story = translator.translate(story, dest=language).text
     return translated_story
 
-# Functie voor het genereren van illustraties
-def generate_illustration(prompt):
+# Functie voor het genereren van samenhangende illustraties
+def generate_illustration(paragraph, theme, style="children's cartoon"):
     dalle_prompt = (
-        f"A children's cartoon-style illustration of {prompt}. "
-        "Bright colors, consistent style, suitable for a children's book."
+        f"An illustration in {style} style. The theme is {theme}. "
+        f"The content is: {paragraph}. Bright colors, consistent design, and suitable for children."
     )
     response = openai.Image.create(
         prompt=dalle_prompt,
@@ -102,7 +103,7 @@ if st.sidebar.button("Generate Story"):
         for i, paragraph in enumerate(paragraphs):
             if paragraph.strip():
                 st.write(f"**Page {i+1}:** {paragraph.strip()}")
-                illustration = generate_illustration(paragraph.strip())
+                illustration = generate_illustration(paragraph.strip(), theme)
                 st.image(illustration, use_column_width=True)
 
 st.sidebar.markdown("---")
