@@ -1,6 +1,7 @@
 import os
 import openai
 import streamlit as st
+from googletrans import Translator
 from PIL import Image
 import requests
 from io import BytesIO
@@ -9,20 +10,26 @@ from io import BytesIO
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Functie voor het genereren van een verhaal
-def generate_story(child_name, favorite_animal, theme, length):
+def generate_story(child_name, favorite_animal, theme, length, language):
     length_map = {"Kort": 200, "Middel": 500, "Lang": 1000}
     max_tokens = length_map[length]
+
     prompt = (
         f"Write a children's story about {child_name}, who loves {favorite_animal}, "
         f"with a theme of {theme}. Make it a {length.lower()} story suitable for children."
     )
+
     response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[{"role": "system", "content": prompt}],
         max_tokens=max_tokens,
     )
     story = response["choices"][0]["message"]["content"]
-    return story
+
+    # Vertaal het verhaal naar de gekozen taal
+    translator = Translator()
+    translated_story = translator.translate(story, dest=language).text
+    return translated_story
 
 # Functie voor het genereren van illustraties
 def generate_illustration(prompt):
@@ -49,6 +56,33 @@ child_name = st.sidebar.text_input("Child's Name", "Ayyuce")
 favorite_animal = st.sidebar.text_input("Favorite Animal", "Rabbit")
 theme = st.sidebar.selectbox("Story Theme", ["Adventure", "Friendship", "Courage", "Winter"])
 story_length = st.sidebar.selectbox("Story Length", ["Kort", "Middel", "Lang"])
+language = st.sidebar.selectbox(
+    "Choose Language",
+    [
+        "en",  # Engels
+        "fr",  # Frans
+        "nl",  # Nederlands
+        "de",  # Duits
+        "it",  # Italiaans
+        "es",  # Spaans
+        "tr",  # Turks
+        "ja",  # Japans
+        "ko",  # Koreaans
+        "pt",  # Portugees
+    ],
+    format_func=lambda lang: {
+        "en": "Engels",
+        "fr": "Frans",
+        "nl": "Nederlands",
+        "de": "Duits",
+        "it": "Italiaans",
+        "es": "Spaans",
+        "tr": "Turks",
+        "ja": "Japans",
+        "ko": "Koreaans",
+        "pt": "Portugees",
+    }[lang]
+)
 
 # Extra informatie
 extra_info = st.sidebar.text_area(
@@ -59,7 +93,7 @@ extra_info = st.sidebar.text_area(
 # Verhaal genereren
 if st.sidebar.button("Generate Story"):
     with st.spinner("Generating your story and illustrations..."):
-        story = generate_story(child_name, favorite_animal, theme, story_length)
+        story = generate_story(child_name, favorite_animal, theme, story_length, language)
         st.subheader("Your Story:")
         st.write(story)
 
