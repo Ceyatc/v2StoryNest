@@ -2,74 +2,76 @@ import os
 import openai
 import streamlit as st
 from PIL import Image
+import requests
 from io import BytesIO
-from googletrans import Translator
 
-# Load OpenAI API Key from Streamlit Secrets
+# Haal API-sleutels op vanuit Streamlit Secrets
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Set up Streamlit interface
-st.title("StoryNest: AI-Personalized Children's Stories")
+# Functie voor het genereren van een verhaal
+def generate_story(child_name, favorite_animal, theme, length):
+    length_map = {"Kort": 200, "Middel": 500, "Lang": 1000}
+    max_tokens = length_map[length]
+    prompt = (
+        f"Write a children's story about {child_name}, who loves {favorite_animal}, "
+        f"with a theme of {theme}. Make it a {length.lower()} story suitable for children."
+    )
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[{"role": "system", "content": prompt}],
+        max_tokens=max_tokens,
+    )
+    story = response["choices"][0]["message"]["content"]
+    return story
 
-# Language Selection
-st.sidebar.header("Settings")
-language = st.sidebar.selectbox("Select Language:", ["English", "French", "Spanish", "German", "Dutch", "Italian"])
+# Functie voor het genereren van illustraties
+def generate_illustration(prompt):
+    dalle_prompt = (
+        f"A children's cartoon-style illustration of {prompt}. "
+        "Bright colors, consistent style, suitable for a children's book."
+    )
+    response = openai.Image.create(
+        prompt=dalle_prompt,
+        n=1,
+        size="512x512"
+    )
+    image_url = response['data'][0]['url']
+    image_response = requests.get(image_url)
+    img = Image.open(BytesIO(image_response.content))
+    return img
 
-# Input Fields
-st.header("Enter Story Details")
-child_name = st.text_input("Child's Name:")
-favorite_animal = st.text_input("Favorite Animal:")
-theme = st.text_input("Story Theme (e.g., Adventure, Friendship, Magic):")
-additional_notes = st.text_area("Additional Information (Optional):")
-story_length = st.slider("Select Story Length:", min_value=100, max_value=1000, step=100)
+# Streamlit UI
+st.title("StoryNest: Create Personalized Children's Stories")
+st.sidebar.title("Story Settings")
 
-# Generate Story
-if st.button("Generate Story"):
-    if not openai.api_key:
-        st.error("OpenAI API Key not found. Please configure it in Streamlit Secrets.")
-    elif not child_name or not favorite_animal or not theme:
-        st.error("Please fill in all required fields.")
-    else:
-        # Story Prompt
-        prompt = (
-            f"Write a children's story about {child_name}, who loves {favorite_animal}, with a theme of {theme}. "
-            f"Include details: {additional_notes}. Keep it creative and magical."
-        )
-        try:
-            # Generate Story
-            response = openai.ChatCompletion.create(
-                model="gpt-4",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=story_length,
-                temperature=0.7,
-            )
-            story = response["choices"][0]["message"]["content"]
+# Gebruikersinvoer
+child_name = st.sidebar.text_input("Child's Name", "Ayyuce")
+favorite_animal = st.sidebar.text_input("Favorite Animal", "Rabbit")
+theme = st.sidebar.selectbox("Story Theme", ["Adventure", "Friendship", "Courage", "Winter"])
+story_length = st.sidebar.selectbox("Story Length", ["Kort", "Middel", "Lang"])
 
-            # Translate Story
-            if language != "English":
-                translator = Translator()
-                translated_story = translator.translate(story, src="en", dest=language[:2].lower()).text
-                st.subheader(f"Story in {language}")
-                st.write(translated_story)
-            else:
-                st.subheader("Generated Story")
-                st.write(story)
+# Extra informatie
+extra_info = st.sidebar.text_area(
+    "Additional Information (Optional)",
+    "Provide extra details to make the story unique (e.g., hobbies, places, friends)."
+)
 
-        except Exception as e:
-            st.error(f"Error generating story: {str(e)}")
+# Verhaal genereren
+if st.sidebar.button("Generate Story"):
+    with st.spinner("Generating your story and illustrations..."):
+        story = generate_story(child_name, favorite_animal, theme, story_length)
+        st.subheader("Your Story:")
+        st.write(story)
 
-# Generate Illustration
-if st.button("Generate Illustration"):
-    try:
-        illustration_prompt = f"A vibrant children's illustration for a story about {child_name} and a {favorite_animal} with a theme of {theme}. Style: magical, colorful, and cohesive."
-        dalle_response = openai.Image.create(
-            prompt=illustration_prompt,
-            n=1,
-            size="512x512",
-        )
-        image_url = dalle_response["data"][0]["url"]
-        response = requests.get(image_url)
-        img = Image.open(BytesIO(response.content))
-        st.image(img, caption="Generated Illustration", use_column_width=True)
-    except Exception as e:
-        st.error(f"Error generating illustration: {str(e)}")
+        # Verdeel het verhaal in alinea's en genereer illustraties
+        paragraphs = story.split("\n")
+        for i, paragraph in enumerate(paragraphs):
+            if paragraph.strip():
+                st.write(f"**Page {i+1}:** {paragraph.strip()}")
+                illustration = generate_illustration(paragraph.strip())
+                st.image(illustration, use_column_width=True)
+
+st.sidebar.markdown("---")
+st.sidebar.markdown(
+    "Developed with ❤️ by [StoryNest](https://yourwebsite.com)"
+)
