@@ -1,4 +1,3 @@
-
 import streamlit as st
 import openai
 import requests
@@ -29,7 +28,7 @@ def translate_text(text, target_language):
         st.error(f"Error during translation: {e}")
         return text  # Fallback if translation fails
 
-# Story Generator
+# Story Generator (Updated for Chat Model)
 def generate_story(name, favorite_animal, theme, length):
     prompts = {
         "Short": 300,
@@ -43,13 +42,14 @@ def generate_story(name, favorite_animal, theme, length):
     )
     
     try:
-        response = openai.Completion.create(
-            model="gpt-4",
-            prompt=prompt,
+        # Use the chat-based model (v1/chat/completions endpoint)
+        response = openai.ChatCompletion.create(
+            model="gpt-4",  # Using GPT-4 chat model
+            messages=[{"role": "system", "content": prompt}],
             max_tokens=prompts[length],
             temperature=0.8
         )
-        story = response.choices[0].text.strip()
+        story = response['choices'][0]['message']['content'].strip()
         return story
     except Exception as e:
         st.error(f"Error generating story: {e}")
