@@ -1,102 +1,85 @@
 import openai
-import streamlit as st
-from PIL import Image
 import requests
-from io import BytesIO
+import streamlit as st
+import json
 import os
-from dotenv import load_dotenv
 
-# Laad de API-sleutels uit .env-bestand
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-REPLICATE_API_KEY = os.getenv("REPLICATE_API_KEY")
+# Laden van API Keys vanuit Streamlit Secrets
+openai.api_key = os.getenv("OPENAI_API_KEY")
+leonardo_api_key = os.getenv("LEONARDO_API_KEY")
 
-openai.api_key = OPENAI_API_KEY
+# Functie om een verhaal te genereren met een logische opbouw
+def generate_story(character_name, favorite_animal, theme, length, language):
+    prompts = {
+        "Adventure": f"A thrilling adventure about {character_name} and their beloved {favorite_animal}.",
+        "Fantasy": f"A magical journey where {character_name} discovers a hidden world with {favorite_animal}.",
+        "Mystery": f"A suspenseful tale where {character_name} solves a mystery with {favorite_animal}.",
+        "Friendship": f"A heartwarming story about {character_name} and {favorite_animal} learning the value of friendship.",
+    }
+    
+    prompt = prompts.get(theme, "A unique children's story.")
 
-# Functie om een verhaal te genereren
-def generate_story(child_name, favorite_animal, theme, story_length, language):
-    prompt = f"""
-    Write a children's story in {language} about {child_name}, who loves {favorite_animal}.
-    The theme is {theme}, and the story should be {story_length}. Ensure the story has a clear ending and is engaging for children.
-    """
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "system", "content": "You are a children's story writer."},
-                      {"role": "user", "content": prompt}],
-            temperature=0.7,
-            max_tokens=1500
-        )
-        story = response['choices'][0]['message']['content'].strip()
-        return story
-    except Exception as e:
-        return f"Error generating story: {e}"
+    # Story length settings
+    story_lengths = {"Short": 400, "Medium": 800, "Long": 1500}
+    max_tokens = story_lengths.get(length, 800)
 
-# Functie om illustraties te genereren
-def generate_illustration(paragraph, theme, style="storybook cartoon style for children"):
-    prompt = (
-        f"Create a consistent and cohesive children's storybook illustration in '{style}'. "
-        f"The image should reflect: '{paragraph}'. "
-        f"Ensure the image aligns with the theme '{theme}', has consistent characters, colors, and no text, numbers, or symbols."
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "system", "content": "Write a children's story with a clear beginning, middle, and end."},
+                  {"role": "user", "content": prompt}],
+        max_tokens=max_tokens,
+        temperature=0.7
     )
-    try:
-        url = "https://api.replicate.com/v1/predictions"
-        headers = {
-            "Authorization": f"Token {REPLICATE_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        data = {
-            "version": "latest",
-            "input": {
-                "prompt": prompt,
-                "image_dimensions": "512x512",
-                "negative_prompt": "text, watermark, logo, numbers, letters",
-            },
-        }
-        response = requests.post(url, headers=headers, json=data)
-        response.raise_for_status()
+    return response["choices"][0]["message"]["content"]
 
-        prediction = response.json()
-        image_url = prediction["output"][0]
-        image_response = requests.get(image_url)
-        image = Image.open(BytesIO(image_response.content))
-        return image
-    except Exception as e:
-        print(f"Error generating illustration: {e}")
+# Functie om een illustratie te genereren met Leonardo AI
+def generate_image(prompt):
+    headers = {
+        "Authorization": f"Bearer {leonardo_api_key}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "prompt": prompt,
+        "model": "stable-diffusion-xl",
+        "num_images": 1,
+        "aspect_ratio": "16:9",
+        "negative_prompt": "text, watermark, logo, blurry, distorted"
+    }
+
+    response = requests.post("https://cloud.leonardo.ai/api/generate", headers=headers, json=payload)
+    if response.status_code == 200:
+        image_data = response.json()
+        image_url = image_data["images"][0]["url"]
+        return image_url
+    else:
         return None
 
-# Streamlit-app
-st.title("StoryNest: Create Personalized Children's Stories with Illustrations")
+# Streamlit Webinterface
+st.title("StoryNest - AI Generated Children's Stories & Illustrations")
 
-# Invoeropties
-st.sidebar.header("Story Settings")
-child_name = st.sidebar.text_input("Child's Name", value="Ayyuce")
-favorite_animal = st.sidebar.text_input("Favorite Animal", value="Rabbit")
-theme = st.sidebar.selectbox("Select Theme", ["Adventure", "Friendship", "Courage", "Winter", "Magical"])
-story_length = st.sidebar.selectbox("Story Length", ["Short", "Medium", "Long"])
-language = st.sidebar.selectbox(
-    "Select Language",
-    ["English", "French", "Dutch", "German", "Italian", "Spanish", "Turkish", "Japanese", "Korean", "Portuguese"]
-)
+# Gebruikersinput
+character_name = st.text_input("Enter the child's name:")
+favorite_animal = st.text_input("Enter the child's favorite animal:")
+story_length = st.selectbox("Select story length:", ["Short", "Medium", "Long"])
+story_theme = st.selectbox("Select story theme:", ["Adventure", "Fantasy", "Mystery", "Friendship"])
+story_language = st.selectbox("Select language:", ["English", "French", "Dutch", "German", "Italian", "Spanish", "Turkish", "Japanese", "Korean", "Portuguese"])
 
-# Verhaal en illustraties genereren
-if st.sidebar.button("Generate Story and Illustrations"):
-    with st.spinner("Generating story and illustrations..."):
-        # Verhaal genereren
-        story = generate_story(child_name, favorite_animal, theme, story_length, language)
-        st.subheader("Generated Story:")
+if st.button("Generate Story & Illustrations"):
+    if character_name and favorite_animal:
+        story = generate_story(character_name, favorite_animal, story_theme, story_length, story_language)
+        st.subheader("Generated Story")
         st.write(story)
 
-        # Illustraties genereren per alinea
-        st.subheader("Illustrations:")
-        paragraphs = story.split("\n")
-        for i, paragraph in enumerate(paragraphs):
-            if paragraph.strip():
-                st.write(f"**Page {i+1}:** {paragraph.strip()}")
-                illustration = generate_illustration(paragraph.strip(), theme)
-                if illustration:
-                    st.image(illustration, use_column_width=True)
-                else:
-                    st.write("Illustration could not be generated for this page.")
+        # Illustraties per alinea genereren
+        st.subheader("Illustrations")
+        story_sentences = story.split(". ")
+        for i, sentence in enumerate(story_sentences[:5]):
+            image_url = generate_image(f"{sentence}, child illustration, cartoon style")
+            if image_url:
+                st.image(image_url, caption=f"Illustration {i+1}", use_column_width=True)
+            else:
+                st.write("Failed to generate image.")
 
-st.sidebar.info("Powered by OpenAI and Replicate")
+    else:
+        st.warning("Please fill in all fields.")
