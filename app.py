@@ -1,103 +1,105 @@
-import os
-import openai
-import replicate
 import streamlit as st
-from dotenv import load_dotenv
-from deep_translator import GoogleTranslator
+import openai
+import random
+from googletrans import Translator
+import os
+import requests
 
-# Load environment variables
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-REPLICATE_API_KEY = os.getenv("REPLICATE_API_KEY")
+# Load API keys securely
+openai.api_key = os.getenv("OPENAI_API_KEY")
+leonardo_api_key = os.getenv("LEONARDO_API_KEY")
 
-# Configure API Keys
-openai.api_key = OPENAI_API_KEY
-replicate.api_key = REPLICATE_API_KEY
+# Ensure API keys exist
+if not openai.api_key or not leonardo_api_key:
+    st.error("API keys are missing. Set them in Streamlit Secrets or .env file.")
+    st.stop()
 
-# Set up Streamlit UI
-st.title("StoryNest - AI-Generated Children's Stories")
-st.sidebar.header("Story Customization")
+# Story Themes
+themes = ["Adventure", "Friendship", "Magic", "Mystery", "Courage", "Exploration"]
 
-# Input fields for story customization
-child_name = st.sidebar.text_input("Child's Name", "Emma")
-favorite_animal = st.sidebar.text_input("Favorite Animal", "Rabbit")
+# Translation Function
+translator = Translator()
 
-# Select a theme, with an option for random
-themes = ["Adventure", "Friendship", "Courage", "Magic", "Random"]
-selected_theme = st.sidebar.selectbox("Choose a Theme", themes)
-
-if selected_theme == "Random":
-    import random
-    selected_theme = random.choice(["Adventure", "Friendship", "Courage", "Magic"])
-
-# Select story length (ENGLISH labels)
-story_length = st.sidebar.radio("Story Length", ["Short", "Medium", "Long"])
-
-# Language selection
-languages = {
-    "English": "en",
-    "French": "fr",
-    "Dutch": "nl",
-    "German": "de",
-    "Italian": "it",
-    "Spanish": "es",
-    "Turkish": "tr",
-    "Japanese": "ja",
-    "Korean": "ko",
-    "Portuguese": "pt"
-}
-selected_language = st.sidebar.selectbox("Choose Language", list(languages.keys()))
-
-# Button to generate story
-if st.sidebar.button("Generate Story"):
-
-    # Story Prompt for OpenAI
-    prompt = f"Write a children's story about {child_name}, who loves {favorite_animal}, with a theme of {selected_theme}. \
-               Make sure the story has a clear beginning, middle, and logical ending."
-
-    # Adjust length based on selection
-    max_tokens = {"Short": 300, "Medium": 600, "Long": 1200}[story_length]
-
-    # Generate story
+def translate_text(text, target_language):
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4-turbo",  # More powerful & logical model
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=max_tokens
-        )
-        story = response["choices"][0]["message"]["content"].strip()
+        translated = translator.translate(text, dest=target_language)
+        return translated.text
+    except:
+        return text  # Fallback if translation fails
+
+# Story Generator
+def generate_story(name, favorite_animal, theme, length):
+    prompts = {
+        "Short": 300,
+        "Medium": 600,
+        "Long": 1200
+    }
     
-        # Translate story if needed
-        if selected_language != "English":
-            story = GoogleTranslator(source="auto", target=languages[selected_language]).translate(story)
+    prompt = (
+        f"Write a well-structured children's story about {name}, who loves {favorite_animal}, with the theme of {theme}. "
+        "The story should be engaging, creative, and must have a clear beginning, middle, and ending."
+    )
+    
+    response = openai.ChatCompletion.create(
+        model="gpt-4",
+        messages=[{"role": "system", "content": prompt}],
+        max_tokens=prompts[length],
+        temperature=0.8
+    )
+    
+    story = response["choices"][0]["message"]["content"]
+    return story
 
-        # Display story
-        st.subheader("Generated Story")
-        st.write(story)
+# Illustration Generator using Leonardo AI
+def generate_illustration_with_leonardo(story_text):
+    prompt = f"A professional, child-friendly cartoon-style illustration for the following story scene:\n\n{story_text}"
+    
+    url = "https://api.leonardo.ai/v1/generate"  # Hypothetical Leonardo API endpoint
+    headers = {
+        "Authorization": f"Bearer {leonardo_api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "prompt": prompt,
+        "width": 512,
+        "height": 512,
+        "style": "cartoon"  # Adjust style to your preference
+    }
+    
+    response = requests.post(url, headers=headers, json=data)
+    
+    if response.status_code == 200:
+        image_url = response.json().get("image_url")
+        return image_url
+    else:
+        return None  # Return None if the image generation fails
 
-    except Exception as e:
-        st.error(f"Failed to generate story. Error: {e}")
+# Streamlit UI
+st.title("StoryNest - AI Story & Illustration Generator")
 
-    # Image generation
-    st.subheader("Story Illustrations")
+# User Input
+name = st.text_input("Enter child's name:", "Aiden")
+favorite_animal = st.text_input("Enter child's favorite animal:", "Rabbit")
+theme = st.selectbox("Choose a theme:", themes)
+story_length = st.selectbox("Choose story length:", ["Short", "Medium", "Long"])
+language = st.selectbox("Select story language:", ["English", "French", "Dutch", "German", "Italian", "Spanish", "Turkish", "Japanese", "Korean", "Portuguese"])
 
-    story_parts = story.split("\n\n")  # Split story into logical parts
-    images = []
+if st.button("Generate Story & Illustrations"):
+    st.subheader("Generated Story:")
+    
+    story = generate_story(name, favorite_animal, theme, story_length)
+    translated_story = translate_text(story, language)
+    st.write(translated_story)
 
-    for i, part in enumerate(story_parts):
-        image_prompt = f"An illustrated children's book scene for the story: {part}. \
-                         The style should be colorful, cartoon-like, and consistent with previous images. No text or numbers."
+    st.subheader("Illustrations:")
+    paragraphs = translated_story.split("\n")
 
-        try:
-            image_url = replicate.run(
-                "stability-ai/stable-diffusion-xl",
-                input={"prompt": image_prompt, "width": 512, "height": 512, "num_inference_steps": 50}
-            )
+    for paragraph in paragraphs:
+        if paragraph.strip():
+            image_url = generate_illustration_with_leonardo(paragraph)
             if image_url:
-                images.append(image_url)
-                st.image(image_url, caption=f"Illustration {i+1}")
+                st.image(image_url, use_column_width=True)
             else:
-                st.warning(f"Failed to generate image for part {i+1}.")
-        
-        except Exception as e:
-            st.error(f"Failed to generate image. Error: {e}")
+                st.write("Image generation failed for this scene.")
+
+st.write("© StoryNest - AI-Powered Personalized Storytelling")
