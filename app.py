@@ -28,7 +28,7 @@ def translate_text(text, target_language):
         st.error(f"Error during translation: {e}")
         return text  # Fallback if translation fails
 
-# Story Generator (Updated for Chat Model)
+# Improved Story Generator (Ensures Logical Ending)
 def generate_story(name, favorite_animal, theme, length):
     prompts = {
         "Short": 300,
@@ -38,11 +38,11 @@ def generate_story(name, favorite_animal, theme, length):
     
     prompt = (
         f"Write a well-structured children's story about {name}, who loves {favorite_animal}, with the theme of {theme}. "
-        "The story should be engaging, creative, and must have a clear beginning, middle, and ending."
+        "Ensure the story has a clear beginning, middle, and an exciting, happy ending that children would enjoy. "
+        "The story should be engaging, creative, and suitable for kids."
     )
     
     try:
-        # Use the chat-based model (v1/chat/completions endpoint)
         response = openai.ChatCompletion.create(
             model="gpt-4",  # Using GPT-4 chat model
             messages=[{"role": "system", "content": prompt}],
@@ -55,9 +55,10 @@ def generate_story(name, favorite_animal, theme, length):
         st.error(f"Error generating story: {e}")
         return ""
 
-# Illustration Generator using Leonardo API
-def generate_illustration_with_leonardo(story_text):
-    prompt = f"A professional, child-friendly cartoon-style illustration for the following story scene:\n\n{story_text}"
+# Improved Illustration Generator (More Specific Prompts)
+def generate_illustration_with_leonardo(story_text, paragraph_number):
+    prompt = f"A fun and colorful illustration for a children's story. The scene is from the story where {story_text}. "
+    prompt += f"Make sure the illustration is clear, vibrant, and appropriate for kids. This is illustration number {paragraph_number}."
 
     # Endpoint for Leonardo's image generation API
     url = "https://cloud.leonardo.ai/api/rest/v1/generations"
@@ -85,7 +86,7 @@ def generate_illustration_with_leonardo(story_text):
             # Check for the generation job ID
             if "sdGenerationJob" in response_data:
                 generation_id = response_data["sdGenerationJob"]["generationId"]
-                st.write(f"Image generation started. Generation ID: {generation_id}")
+                st.write(f"Image generation started for paragraph {paragraph_number}. Generation ID: {generation_id}")
                 
                 # Poll for the result until it's ready (max 5 minutes for example)
                 return poll_for_image(generation_id)
@@ -112,8 +113,6 @@ def poll_for_image(generation_id, max_retries=30, delay=10):
             
             if response.status_code == 200:
                 response_data = response.json()
-                # Log the full response for debugging
-                st.write(f"Response Data: {response_data}")
                 
                 # Check if the image URL is ready
                 if "data" in response_data and len(response_data["data"]) > 0:
@@ -157,13 +156,13 @@ if st.button("Generate Story & Illustrations"):
         st.subheader("Illustrations:")
         paragraphs = translated_story.split("\n")
 
-        for paragraph in paragraphs:
+        for idx, paragraph in enumerate(paragraphs):
             if paragraph.strip():
-                image_url = generate_illustration_with_leonardo(paragraph)
+                image_url = generate_illustration_with_leonardo(paragraph, idx + 1)
                 if image_url:
                     st.image(image_url, use_column_width=True)
                 else:
-                    st.write("Image generation failed for this scene.")
+                    st.write(f"Image generation failed for paragraph {idx + 1}.")
     else:
         st.error("Story generation failed.")
 
